@@ -31,18 +31,21 @@ if page == "Dashboard":
 
 # ---------------- Notebook Viewer ----------------
 elif page == "Notebook Viewer":
-    st.header("📓 Project Notebook")
+    st.header("📓 Upload & View Notebook")
 
-    notebook_path = "Shyamoli_project_Sneha.ipynb"   # same folder
+    uploaded_file = st.file_uploader(
+        "Upload your .ipynb file",
+        type=["ipynb"]
+    )
 
-    try:
-        with open(notebook_path, "r", encoding="utf-8") as f:
-            notebook = nbformat.read(f, as_version=4)
+    if uploaded_file is not None:
+        try:
+            notebook = nbformat.read(uploaded_file, as_version=4)
 
-        html_exporter = HTMLExporter()
-        body, _ = html_exporter.from_notebook_node(notebook)
+            html_exporter = HTMLExporter()
+            body, _ = html_exporter.from_notebook_node(notebook)
 
-        html(body, height=900, scrolling=True)
+            html(body, height=900, scrolling=True)
 
-    except Exception as e:
-        st.error(f"Error loading notebook: {e}")
+        except Exception as e:
+            st.error(f"Error loading notebook: {e}")
