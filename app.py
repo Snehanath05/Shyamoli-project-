@@ -1,76 +1,63 @@
 import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import nbformat
+from nbconvert import HTMLExporter
+from streamlit.components.v1 import html
+import base64
 
-# ---------------- Page Config ----------------
-st.set_page_config(page_title="Booking Analysis Dashboard", layout="wide")
+st.set_page_config(page_title="Booking Analysis Project", layout="wide")
 
-st.title("📊 Booking Analysis Dashboard")
+st.title("📊 Booking Analysis Project")
 
-# ---------------- File Upload ----------------
-uploaded_file = st.file_uploader("Upload your booking CSV file", type=["csv"])
+# Sidebar Navigation
+page = st.sidebar.radio(
+    "Navigate",
+    ["Dashboard", "Notebook Viewer"]
+)
 
-if uploaded_file is not None:
+# ---------------- Dashboard ----------------
+if page == "Dashboard":
+    st.header("📈 Project Overview")
 
-    # Load data
-    df = pd.read_csv(uploaded_file)
+    st.write("""
+    This dashboard presents insights from the booking dataset including:
 
-    st.success("File uploaded successfully!")
+    - Data Cleaning & Preprocessing  
+    - Revenue Analysis  
+    - Booking Trends  
+    - Route Performance  
+    - Cancellation Patterns  
+    """)
 
-    # ---------------- Data Preview ----------------
-    with st.expander("Preview Dataset"):
-        st.dataframe(df.head())
+    st.success("Use the sidebar to view the notebook.")
 
-    # ---------------- KPI Section ----------------
-    st.subheader("📌 Key Metrics")
+# ---------------- Notebook Viewer ----------------
+elif page == "Notebook Viewer":
+    st.header("📓 Upload & View Notebook")
 
-    col1, col2, col3 = st.columns(3)
+    uploaded_file = st.file_uploader(
+        "Upload your .ipynb file",
+        type=["ipynb"]
+    )
 
-    col1.metric("Total Records", len(df))
+    if uploaded_file is not None:
+        try:
+            # Read notebook
+            notebook = nbformat.read(uploaded_file, as_version=4)
 
-    if "revenue" in df.columns:
-        total_revenue = df["revenue"].sum()
-        col2.metric("Total Revenue", f"${total_revenue:,.2f}")
+            # Export notebook as HTML (with embedded images and charts)
+            html_exporter = HTMLExporter()
+            html_exporter.template_name = 'classic'  # 'classic' template preserves outputs
 
-    if "canceled" in df.columns:
-        cancel_rate = df["canceled"].mean() * 100
-        col3.metric("Cancellation Rate", f"{cancel_rate:.2f}%")
+            body, resources = html_exporter.from_notebook_node(notebook)
 
-    # ---------------- Booking Trend ----------------
-    if "booking_date" in df.columns:
-        st.subheader("📈 Booking Trend")
+            # Save images in base64 so charts are visible
+            for name, data in resources.get('outputs', {}).items():
+                if 'image/png' in data:
+                    img_b64 = data['image/png']
+                    body = body.replace(f'attachment:{name}', f'data:image/png;base64,{img_b64}')
 
-        df["booking_date"] = pd.to_datetime(df["booking_date"], errors="coerce")
-        trend = df.groupby(df["booking_date"].dt.to_period("M")).size()
-        trend.index = trend.index.astype(str)
+            # Display HTML in Streamlit
+            html(body, height=900, scrolling=True)
 
-        fig1, ax1 = plt.subplots()
-        trend.plot(kind="line", marker="o", ax=ax1)
-        plt.xticks(rotation=45)
-        plt.title("Monthly Booking Trend")
-        st.pyplot(fig1)
-
-    # ---------------- Revenue by Category / Route ----------------
-    if "route" in df.columns and "revenue" in df.columns:
-        st.subheader("💰 Revenue by Route")
-
-        route_rev = df.groupby("route")["revenue"].sum().sort_values(ascending=False).head(10)
-
-        fig2, ax2 = plt.subplots()
-        route_rev.plot(kind="bar", ax=ax2)
-        plt.xticks(rotation=45)
-        plt.title("Top 10 Routes by Revenue")
-        st.pyplot(fig2)
-
-    # ---------------- Cancellation Distribution ----------------
-    if "canceled" in df.columns:
-        st.subheader("❌ Cancellation Distribution")
-
-        fig3, ax3 = plt.subplots()
-        sns.countplot(x="canceled", data=df, ax=ax3)
-        plt.title("Cancellation Count")
-        st.pyplot(fig3)
-
-else:
-    st.info("Please upload a CSV file to view the dashboard.")
+        except Exception as e:
+            st.error(f"Error loading notebook: {e}")
