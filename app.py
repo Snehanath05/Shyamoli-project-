@@ -2,6 +2,7 @@ import streamlit as st
 import nbformat
 from nbconvert import HTMLExporter
 from streamlit.components.v1 import html
+import base64
 
 st.set_page_config(page_title="Booking Analysis Project", layout="wide")
 
@@ -40,11 +41,22 @@ elif page == "Notebook Viewer":
 
     if uploaded_file is not None:
         try:
+            # Read notebook
             notebook = nbformat.read(uploaded_file, as_version=4)
 
+            # Export notebook as HTML (with embedded images and charts)
             html_exporter = HTMLExporter()
-            body, _ = html_exporter.from_notebook_node(notebook)
+            html_exporter.template_name = 'classic'  # 'classic' template preserves outputs
 
+            body, resources = html_exporter.from_notebook_node(notebook)
+
+            # Save images in base64 so charts are visible
+            for name, data in resources.get('outputs', {}).items():
+                if 'image/png' in data:
+                    img_b64 = data['image/png']
+                    body = body.replace(f'attachment:{name}', f'data:image/png;base64,{img_b64}')
+
+            # Display HTML in Streamlit
             html(body, height=900, scrolling=True)
 
         except Exception as e:
