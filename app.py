@@ -1,118 +1,78 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import numpy as np
 
-# Page configuration
-st.set_page_config(page_title="Travel Data Analyst", layout="wide")
+st.set_page_config(page_title="Booking Analysis Dashboard", layout="wide")
 
-st.title("📊 Travel & Logistics Analysis Dashboard")
-st.markdown("Upload your **Excel (.xlsx)** booking dataset to generate instant insights.")
+st.title("🚌 Booking Data Analysis Dashboard")
 
-# --- File Upload Section ---
-uploaded_file = st.sidebar.file_uploader("Upload your Excel file", type=['xlsx', 'xls'])
-
-@st.cache_data
-def process_data(file):
-    # Read Excel file
-    df = pd.read_excel(file)
-    
-    # Date Conversions (Crucial for Q9 and Q16)
-    date_cols = ['Journey Date', 'Booked On', 'Issued On']
-    for col in date_cols:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
-    
-    # Calculate Lead Time (Q9)
-    if 'Journey Date' in df.columns and 'Booked On' in df.columns:
-        df['Advance Days'] = (df['Journey Date'] - df['Booked On']).dt.days
-        
-    return df
+# Upload CSV
+uploaded_file = st.file_uploader("Upload your dataset CSV", type=["csv"])
 
 if uploaded_file is not None:
-    df = process_data(uploaded_file)
-    
-    # --- Sidebar Filters ---
-    st.sidebar.header("Data Filters")
-    if 'Status' in df.columns:
-        status_list = df['Status'].unique().tolist()
-        selected_status = st.sidebar.multiselect("Filter by Status", status_list, default=status_list)
-        df = df[df['Status'].isin(selected_status)]
 
-    # --- Metrics (Q1, Q3, Q4) ---
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Bookings", len(df))
-    
-    if 'Net Amount' in df.columns:
-        m2.metric("Total Revenue", f"₹{df['Net Amount'].sum():,.2f}")
-    
-    if 'Status' in df.columns:
-        m3.metric("Confirmed Bookings", len(df[df['Status'] == 'Booked']))
-        m4.metric("Cancellations", len(df[df['Status'] == 'Cancel']))
+    df = pd.read_csv(uploaded_file)
 
-    # --- Visual Analysis ---
-    col1, col2 = st.columns(2)
+    st.subheader("Raw Data Preview")
+    st.dataframe(df.head())
 
-    with col1:
-        # Q2: Channel Check
-        if 'Booked By' in df.columns:
-            st.subheader("Top Booking Channels")
-            top_channels = df['Booked By'].value_counts().head(10)
-            fig1 = px.bar(top_channels, orientation='h', color=top_channels.values, 
-                          labels={'value': 'Transactions', 'index': 'Channel'})
-            st.plotly_chart(fig1, use_container_width=True)
+    # -------- Data Cleaning --------
+    df = df.copy()
 
-    with col2:
-        # Q16: Weekly Demand
-        if 'Journey Date' in df.columns:
-            st.subheader("Demand by Day of Week")
-            df['Weekday'] = df['Journey Date'].dt.day_name()
-            day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-            week_data = df['Weekday'].value_counts().reindex(day_order)
-            fig2 = px.line(x=week_data.index, y=week_data.values, markers=True, 
-                           labels={'x': 'Day', 'y': 'Number of Bookings'})
-            st.plotly_chart(fig2, use_container_width=True)
+    if "Email" in df.columns:
+        df["Email"] = df["Email"].fillna("Not Provided")
 
-    # --- Deep Dive Tabs ---
-    tab1, tab2, tab3 = st.tabs(["Route Analysis", "Financials", "Operational Efficiency"])
+    if "Issued On" in df.columns:
+        df["Issued On"] = pd.to_datetime(df["Issued On"], dayfirst=True, errors="coerce")
 
-    with tab1:
-        # Q7 & Q5
-        st.subheader("Route Performance")
-        if 'Route' in df.columns and 'Net Amount' in df.columns:
-            route_rev = df.groupby('Route')['Net Amount'].sum().sort_values(ascending=False).head(10).reset_index()
-            st.write("Top 10 Routes by Revenue")
-            st.dataframe(route_rev, use_container_width=True)
+    if "Booked On" in df.columns:
+        df["Booked On"] = pd.to_datetime(df["Booked On"], dayfirst=True, errors="coerce")
 
-    with tab2:
-        # Q12: OTA vs Local
-        if 'Category' in df.columns:
-            st.subheader("Revenue by Category (OTA vs Online Agent)")
-            cat_rev = df.groupby('Category')['Net Amount'].sum().reset_index()
-            fig3 = px.pie(cat_rev, values='Net Amount', names='Category', hole=0.4)
-            st.plotly_chart(fig3, use_container_width=True)
+    if "Journey Date" in df.columns:
+        df["Journey Date"] = pd.to_datetime(df["Journey Date"], dayfirst=True, errors="coerce")
 
-    with tab3:
-        # Q15: Driver Analysis
-        if 'Drivers' in df.columns:
-            st.subheader("Top Performing Drivers (by Revenue)")
-            driver_rev = df.groupby('Drivers')['Net Amount'].sum().sort_values(ascending=False).head(10)
-            st.bar_chart(driver_rev)
+    # -------- KPIs --------
+    st.header("📊 Key Metrics")
 
-    # --- Churn Risk (Q17) ---
-    st.divider()
-    st.subheader("🚨 High-Risk Churn Passengers")
-    if 'Phone number' in df.columns:
-        churn_data = df.groupby('Phone number').agg({
-            'Status': lambda x: (x == 'Cancel').sum(),
-            'Name': 'first'
-        }).rename(columns={'Status': 'Total Cancellations'}).sort_values('Total Cancellations', ascending=False)
-        
-        high_risk = churn_data[churn_data['Total Cancellations'] >= 2]
-        st.write(f"Found {len(high_risk)} passengers with multiple cancellations.")
-        st.table(high_risk.head(10))
+    col1, col2, col3 = st.columns(3)
+
+    total_bookings = len(df)
+    total_revenue = df["Net Amount"].sum() if "Net Amount" in df.columns else 0
+    total_routes = df["Route"].nunique() if "Route" in df.columns else 0
+
+    col1.metric("Total Bookings", total_bookings)
+    col2.metric("Total Revenue", f"{total_revenue:,.2f}")
+    col3.metric("Unique Routes", total_routes)
+
+    # -------- Channel Analysis --------
+    if "Booked By" in df.columns:
+        st.subheader("📌 Booking Channel Distribution")
+        channel_counts = df["Booked By"].value_counts()
+        st.bar_chart(channel_counts)
+
+    # -------- Status Analysis --------
+    if "Status" in df.columns:
+        st.subheader("📌 Booking Status")
+        status_counts = df["Status"].value_counts()
+        st.bar_chart(status_counts)
+
+    # -------- Top Boarding Points --------
+    if "Boarding Point" in df.columns:
+        st.subheader("📌 Top Boarding Points")
+        top_boarding = df["Boarding Point"].value_counts().head(5)
+        st.bar_chart(top_boarding)
+
+    # -------- Revenue by Route --------
+    if "Route" in df.columns and "Net Amount" in df.columns:
+        st.subheader("💰 Revenue by Route")
+        route_rev = df.groupby("Route")["Net Amount"].sum().sort_values(ascending=False)
+        st.bar_chart(route_rev.head(10))
+
+    # -------- Cancellation Rate --------
+    if "Status" in df.columns:
+        cancel_rate = (df["Status"].str.lower() == "cancel").mean() * 100
+        st.subheader("⚠️ Cancellation Rate")
+        st.write(f"{cancel_rate:.2f}%")
 
 else:
-    st.info("Please upload an Excel file from the sidebar to begin the analysis.")
-    # Show a sample of the expected structure
-    st.image("https://via.placeholder.com/800x400.png?text=Upload+Your+Booking+Excel+Here")
+    st.info("Please upload your CSV file to begin.")
