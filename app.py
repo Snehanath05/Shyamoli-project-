@@ -1,11 +1,10 @@
 import streamlit as st
 import nbformat
-from nbconvert import HTMLExporter
-from streamlit.components.v1 import html
-import base64
+from nbconvert.preprocessors import ExecutePreprocessor
+import plotly.graph_objs as go
+import io
 
 st.set_page_config(page_title="Booking Analysis Project", layout="wide")
-
 st.title("📊 Booking Analysis Project")
 
 # Sidebar Navigation
@@ -17,7 +16,6 @@ page = st.sidebar.radio(
 # ---------------- Dashboard ----------------
 if page == "Dashboard":
     st.header("📈 Project Overview")
-
     st.write("""
     This dashboard presents insights from the booking dataset including:
 
@@ -27,12 +25,11 @@ if page == "Dashboard":
     - Route Performance  
     - Cancellation Patterns  
     """)
-
     st.success("Use the sidebar to view the notebook.")
 
 # ---------------- Notebook Viewer ----------------
 elif page == "Notebook Viewer":
-    st.header("📓 Upload & View Notebook")
+    st.header("📓 Upload & View Notebook with Interactive Charts")
 
     uploaded_file = st.file_uploader(
         "Upload your .ipynb file",
@@ -44,20 +41,28 @@ elif page == "Notebook Viewer":
             # Read notebook
             notebook = nbformat.read(uploaded_file, as_version=4)
 
-            # Export notebook as HTML (with embedded images and charts)
-            html_exporter = HTMLExporter()
-            html_exporter.template_name = 'classic'  # 'classic' template preserves outputs
+            # Execute the notebook (this runs all cells)
+            ep = ExecutePreprocessor(timeout=600, kernel_name='python3')
+            ep.preprocess(notebook, {'metadata': {'path': './'}})
 
-            body, resources = html_exporter.from_notebook_node(notebook)
-
-            # Save images in base64 so charts are visible
-            for name, data in resources.get('outputs', {}).items():
-                if 'image/png' in data:
-                    img_b64 = data['image/png']
-                    body = body.replace(f'attachment:{name}', f'data:image/png;base64,{img_b64}')
-
-            # Display HTML in Streamlit
-            html(body, height=900, scrolling=True)
+            # Loop through all cells
+            for cell in notebook['cells']:
+                if cell.cell_type == 'code':
+                    # Check for Plotly figure objects
+                    outputs = cell.get('outputs', [])
+                    for output in outputs:
+                        if output.output_type == 'execute_result' or output.output_type == 'display_data':
+                            data = output.get('data', {})
+                            # If it's a plotly figure
+                            if 'application/vnd.plotly.v1+json' in data:
+                                fig_dict = data['application/vnd.plotly.v1+json']
+                                fig = go.Figure(fig_dict)
+                                st.plotly_chart(fig, use_container_width=True)
+                            # If it's plain text or HTML output
+                            elif 'text/plain' in data:
+                                st.text(data['text/plain'])
+                            elif 'text/html' in data:
+                                st.components.v1.html(data['text/html'], height=600, scrolling=True)
 
         except Exception as e:
-            st.error(f"Error loading notebook: {e}")
+            st.error(f"Error executing notebook: {e}")
