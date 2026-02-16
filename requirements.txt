@@ -1,6 +1,6 @@
-streamlit
+
 pandas
 numpy
-notebook
-ipykernel
+streamlit
+nbformat
 nbconvert
