@@ -30,6 +30,20 @@ if page == "Dashboard":
 
     st.success("Use the sidebar to view the notebook.")
 
+    # -------- DOWNLOAD REPORT BUTTON --------
+    st.subheader("⬇️ Download Project Report")
+
+    try:
+        with open("Shyamoli Project (Report)_Sneha Nath.docx", "rb") as file:
+            st.download_button(
+                label="📥 Download Report",
+                data=file,
+                file_name="Booking_Analysis_Report.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+    except:
+        st.warning("Report file not found. Put the file in the same folder as this app.")
+
 # ---------------- Notebook Viewer ----------------
 elif page == "Notebook Viewer":
     st.header("📓 Upload & View Notebook")
@@ -41,22 +55,33 @@ elif page == "Notebook Viewer":
 
     if uploaded_file is not None:
         try:
+            # -------- NOTEBOOK DOWNLOAD BUTTON --------
+            st.download_button(
+                label="📥 Download Notebook",
+                data=uploaded_file,
+                file_name=uploaded_file.name,
+                mime="application/octet-stream"
+            )
+
             # Read notebook
             notebook = nbformat.read(uploaded_file, as_version=4)
 
-            # Export notebook as HTML (with embedded images and charts)
+            # Export notebook as HTML
             html_exporter = HTMLExporter()
-            html_exporter.template_name = 'classic'  # 'classic' template preserves outputs
+            html_exporter.template_name = 'classic'
 
             body, resources = html_exporter.from_notebook_node(notebook)
 
-            # Save images in base64 so charts are visible
+            # Embed images in base64
             for name, data in resources.get('outputs', {}).items():
                 if 'image/png' in data:
                     img_b64 = data['image/png']
-                    body = body.replace(f'attachment:{name}', f'data:image/png;base64,{img_b64}')
+                    body = body.replace(
+                        f'attachment:{name}',
+                        f'data:image/png;base64,{img_b64}'
+                    )
 
-            # Display HTML in Streamlit
+            # Display HTML
             html(body, height=900, scrolling=True)
 
         except Exception as e:
